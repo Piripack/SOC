@@ -3,28 +3,71 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
 <style>
-:root {
+:root[data-theme="light"] {
+  --primary: #ffffff;
+  --secondary: #f5f6fa;
+  --accent: #2980b9;
+  --text: #2c3e50;
+  --background: linear-gradient(135deg, #e0e0e0 0%, #f5f5f5 50%, #ffffff 100%);
+  --chart-grid: rgba(44, 62, 80, 0.1);
+  --table-bg: rgba(255, 255, 255, 0.95);
+  --table-border: rgba(44, 62, 80, 0.2);
+  --upload-bg: rgba(255, 255, 255, 0.95);
+}
+
+:root[data-theme="dark"] {
   --primary: #2c3e50;
   --secondary: #34495e;
   --accent: #3498db;
   --text: #ecf0f1;
+  --background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+  --chart-grid: rgba(52, 152, 219, 0.1);
+  --table-bg: rgba(44, 62, 80, 0.85);
+  --table-border: rgba(52, 152, 219, 0.3);
+  --upload-bg: rgba(44, 62, 80, 0.85);
 }
 
 body {
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  background: var(--primary);
+  background: var(--background);
   color: var(--text);
-  margin: 0;
-  padding: 20px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(circle at 50% 50%, transparent 90%, rgba(52, 152, 219, 0.1)),
+    url("data:image/svg+xml,%3Csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='grid' width='40' height='40' patternUnits='userSpaceOnUse'%3E%3Cpath d='M 40 0 L 0 0 0 40' fill='none' stroke='rgba(52, 152, 219, 0.1)' stroke-width='0.5'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23grid)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: -1;
+  animation: pulse 4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+  100% { opacity: 0.3; }
 }
 
 .container {
   max-width: 1200px;
   margin: 0 auto;
+  position: relative;
+  z-index: 1;
 }
 
 .upload-section {
-  background: var(--secondary);
+  background: var(--upload-bg);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--table-border);
+  box-shadow: 0 0 20px rgba(52, 152, 219, 0.2);
   padding: 20px;
   border-radius: 8px;
   text-align: center;
@@ -32,7 +75,8 @@ body {
 }
 
 .drag-area {
-  border: 2px dashed var(--accent);
+  background: rgba(52, 152, 219, 0.05);
+  border: 2px dashed rgba(52, 152, 219, 0.5);
   padding: 40px;
   border-radius: 8px;
   cursor: pointer;
@@ -51,9 +95,33 @@ body {
 }
 
 .chart-wrapper {
-  background: var(--secondary);
-  padding: 20px;
-  border-radius: 8px;
+  background: rgba(44, 62, 80, 0.85);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--table-border);
+  box-shadow: 0 0 15px rgba(52, 152, 219, 0.2);
+  position: relative;
+}
+
+.chart-wrapper::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  width: 10px;
+  height: 10px;
+  border-top: 2px solid var(--accent);
+  border-left: 2px solid var(--accent);
+}
+
+.chart-wrapper::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-bottom: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
 }
 
 .export-btn {
@@ -64,9 +132,31 @@ body {
   border-radius: 4px;
   cursor: pointer;
   margin: 10px;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 10px rgba(52, 152, 219, 0.3);
+  transition: all 0.3s ease;
 }
 
 .export-btn:hover {
+  box-shadow: 0 0 15px rgba(52, 152, 219, 0.5);
+  opacity: 0.9;
+}
+
+.clear-btn {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 10px;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 10px rgba(52, 152, 219, 0.3);
+  transition: all 0.3s ease;
+}
+
+.clear-btn:hover {
+  box-shadow: 0 0 15px rgba(52, 152, 219, 0.5);
   opacity: 0.9;
 }
 
@@ -74,16 +164,20 @@ body {
   width: 100%;
   margin-top: 20px;
   border-collapse: collapse;
+  background: var(--table-bg);
+  backdrop-filter: blur(10px);
 }
 
 #logTable th, #logTable td {
   padding: 8px;
   text-align: left;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--table-border);
+  color: var(--text);
 }
 
 #logTable th {
-  background: var(--accent);
+  background: rgba(52, 152, 219, 0.8);
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
 }
 
 .upload-message {
@@ -102,22 +196,10 @@ body {
   color: #e74c3c;
 }
 
-.clear-btn {
-  background: #e74c3c;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 4px;
-  cursor: pointer;
-  margin: 10px;
-}
-
-.clear-btn:hover {
-  opacity: 0.9;
-}
-
 .file-history {
-  background: var(--secondary);
+  background: rgba(44, 62, 80, 0.85);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--table-border);
   padding: 15px;
   border-radius: 8px;
   margin-bottom: 20px;
@@ -170,9 +252,51 @@ select.filter-input option {
   background: var(--primary);
   color: var(--text);
 }
+
+.theme-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.2);
+  z-index: 1000;
+}
+
+.theme-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+
+.theme-toggle:hover {
+  opacity: 0.9;
+}
 </style>
 </head>
 <body>
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="display: none;">
+    <circle cx="12" cy="12" r="5"/>
+    <line x1="12" y1="1" x2="12" y2="3"/>
+    <line x1="12" y1="21" x2="12" y2="23"/>
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+    <line x1="1" y1="12" x2="3" y2="12"/>
+    <line x1="21" y1="12" x2="23" y2="12"/>
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+  </svg>
+  <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+</button>
 <div class="container">
   <h1>SOC Log Analysis Dashboard</h1>
   
@@ -697,6 +821,57 @@ function updateRelatedFilters() {
 window.addEventListener('DOMContentLoaded', () => {
   updateFilesList();
   document.getElementById('ipFilter').addEventListener('change', updateRelatedFilters);
+  
+  // Set initial theme
+  const savedTheme = localStorage.getItem('theme') || 'dark';
+  setTheme(savedTheme);
 });
+
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  
+  // Update icon visibility
+  const sunIcon = document.querySelector('.sun-icon');
+  const moonIcon = document.querySelector('.moon-icon');
+  if (theme === 'light') {
+    sunIcon.style.display = 'none';
+    moonIcon.style.display = 'block';
+  } else {
+    sunIcon.style.display = 'block';
+    moonIcon.style.display = 'none';
+  }
+  
+  // Update charts with new theme colors
+  updateChartsTheme();
+}
+
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+  setTheme(newTheme);
+}
+
+function updateChartsTheme() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = isDark ? '#ecf0f1' : '#2c3e50';
+  
+  Chart.defaults.color = textColor;
+  Chart.defaults.borderColor = isDark ? 'rgba(52, 152, 219, 0.1)' : 'rgba(44, 62, 80, 0.1)';
+  
+  // Update existing charts if they exist
+  const charts = [
+    Chart.getChart('ipChart'),
+    Chart.getChart('timeChart')
+  ];
+  
+  charts.forEach(chart => {
+    if (chart) {
+      chart.options.scales.x.ticks.color = textColor;
+      chart.options.scales.y.ticks.color = textColor;
+      chart.update();
+    }
+  });
+}
 </script>
 </body></html>
