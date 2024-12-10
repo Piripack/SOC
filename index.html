@@ -1,0 +1,497 @@
+<html><head><base href="." />
+    <meta charset="UTF-8" /><title>SOC Log Analysis Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+    :root {
+      --primary: #2c3e50;
+      --secondary: #34495e;
+      --accent: #3498db;
+      --text: #ecf0f1;
+    }
+    
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--primary);
+      color: var(--text);
+      margin: 0;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .upload-section {
+      background: var(--secondary);
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    .drag-area {
+      border: 2px dashed var(--accent);
+      padding: 40px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .drag-area:hover {
+      background: rgba(52, 152, 219, 0.1);
+    }
+    
+    .charts-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+    
+    .chart-wrapper {
+      background: var(--secondary);
+      padding: 20px;
+      border-radius: 8px;
+    }
+    
+    .export-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px;
+    }
+    
+    .export-btn:hover {
+      opacity: 0.9;
+    }
+    
+    #logTable {
+      width: 100%;
+      margin-top: 20px;
+      border-collapse: collapse;
+    }
+    
+    #logTable th, #logTable td {
+      padding: 8px;
+      text-align: left;
+      border: 1px solid var(--accent);
+    }
+    
+    #logTable th {
+      background: var(--accent);
+    }
+    
+    .upload-message {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    
+    .success {
+      background: rgba(46, 204, 113, 0.2);
+      color: #2ecc71;
+    }
+    
+    .error {
+      background: rgba(231, 76, 60, 0.2);
+      color: #e74c3c;
+    }
+    
+    .clear-btn {
+      background: #e74c3c;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 10px;
+    }
+    
+    .clear-btn:hover {
+      opacity: 0.9;
+    }
+    
+    .file-history {
+      background: var(--secondary);
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    
+    .file-history h3 {
+      margin-top: 0;
+    }
+    
+    .file-list {
+      list-style: none;
+      padding: 0;
+    }
+    
+    .file-list li {
+      padding: 8px;
+      margin: 5px 0;
+      background: rgba(52, 152, 219, 0.1);
+      border-radius: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .file-list button {
+      margin-left: 10px;
+    }
+    </style>
+    </head>
+    <body>
+    <div class="container">
+      <h1>SOC Log Analysis Dashboard</h1>
+      
+      <div class="file-history">
+        <h3>Previous Uploads</h3>
+        <ul id="fileList" class="file-list"></ul>
+      </div>
+    
+      <div class="upload-section">
+        <div class="drag-area" id="dropZone">
+          <h3>Drag & Drop Log Files Here</h3>
+          <p>or</p>
+          <input type="file" id="fileInput" accept=".log,.txt,.csv" style="display: none">
+          <button class="export-btn" onclick="document.getElementById('fileInput').click()">
+            Select File
+          </button>
+        </div>
+        <div id="uploadMessage"></div>
+        <button class="clear-btn" onclick="clearStoredLogs()">Clear All Logs</button>
+      </div>
+    
+      <div class="charts-container">
+        <div class="chart-wrapper">
+          <h3>IP Address Distribution</h3>
+          <canvas id="ipChart"></canvas>
+          <button class="export-btn" onclick="exportChart('ipChart')">Export</button>
+        </div>
+        <div class="chart-wrapper">
+          <h3>Time-based Activity</h3>
+          <canvas id="timeChart"></canvas>
+          <button class="export-btn" onclick="exportChart('timeChart')">Export</button>
+        </div>
+      </div>
+    
+      <div class="chart-wrapper">
+        <h3>Log Entries</h3>
+        <table id="logTable">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>IP Address</th>
+              <th>Request</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    
+    <script>
+    // Local Storage keys
+    const FILES_LIST_KEY = 'socLogAnalyzer_files';
+    
+    let currentFileId = null;
+    
+    function generateFileId() {
+      return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    }
+    
+    function getStoredFiles() {
+      return JSON.parse(localStorage.getItem(FILES_LIST_KEY) || '[]');
+    }
+    
+    function updateFilesList() {
+      const fileList = document.getElementById('fileList');
+      const files = getStoredFiles();
+      
+      fileList.innerHTML = '';
+      files.forEach(file => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          ${file.name} (${new Date(file.timestamp).toLocaleString()})
+          <div>
+            <button class="export-btn" onclick="loadFile('${file.id}')">Load</button>
+            <button class="clear-btn" onclick="deleteFile('${file.id}')">Delete</button>
+          </div>
+        `;
+        fileList.appendChild(li);
+      });
+    }
+    
+    function saveFile(name, data) {
+      const files = getStoredFiles();
+      const fileId = generateFileId();
+      
+      files.push({
+        id: fileId,
+        name,
+        timestamp: Date.now(),
+      });
+      
+      localStorage.setItem(FILES_LIST_KEY, JSON.stringify(files));
+      localStorage.setItem(`file_${fileId}`, JSON.stringify(data));
+      
+      currentFileId = fileId;
+      updateFilesList();
+      return fileId;
+    }
+    
+    function loadFile(fileId) {
+      try {
+        const data = JSON.parse(localStorage.getItem(`file_${fileId}`));
+        if (data) {
+          currentFileId = fileId;
+          updateCharts(data.ipCounts, data.hourCounts);
+          updateTable(data.logs);
+          showMessage('Successfully loaded file');
+        }
+      } catch (error) {
+        console.error('Error loading file:', error);
+        showMessage('Error loading file', true);
+      }
+    }
+    
+    function deleteFile(fileId) {
+      const files = getStoredFiles().filter(f => f.id !== fileId);
+      localStorage.setItem(FILES_LIST_KEY, JSON.stringify(files));
+      localStorage.removeItem(`file_${fileId}`);
+      
+      if (currentFileId === fileId) {
+        currentFileId = null;
+        updateCharts({}, {});
+        updateTable([]);
+      }
+      
+      updateFilesList();
+      showMessage('File deleted successfully');
+    }
+    
+    function clearStoredLogs() {
+      const files = getStoredFiles();
+      files.forEach(file => {
+        localStorage.removeItem(`file_${file.id}`);
+      });
+      localStorage.removeItem(FILES_LIST_KEY);
+      currentFileId = null;
+      updateCharts({}, {});
+      updateTable([]);
+      updateFilesList();
+      showMessage('Cleared all stored logs');
+    }
+    
+    function showMessage(message, isError = false) {
+      const messageDiv = document.getElementById('uploadMessage');
+      messageDiv.className = `upload-message ${isError ? 'error' : 'success'}`;
+      messageDiv.textContent = message;
+    }
+    
+    function parseLogLine(line) {
+      try {
+        const ipRegex = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/;
+        const dateRegex = /\[(.*?)\]/;
+        const requestRegex = /"([^"]+)"/;
+        const statusRegex = / (\d{3}) /;
+    
+        const ip = line.match(ipRegex)?.[1] || '';
+        const timestamp = line.match(dateRegex)?.[1] || '';
+        const request = line.match(requestRegex)?.[1] || '';
+        const status = line.match(statusRegex)?.[1] || '';
+    
+        return {
+          ip,
+          timestamp,
+          request,
+          status
+        };
+      } catch (error) {
+        console.error('Error parsing log line:', error);
+        return null;
+      }
+    }
+    
+    function processLogData(logContent, fileName) {
+      try {
+        const lines = logContent.split('\n').filter(line => line.trim());
+        const parsedLogs = lines.map(parseLogLine).filter(log => log !== null);
+    
+        if (parsedLogs.length === 0) {
+          showMessage('No valid log entries found in the file', true);
+          return;
+        }
+    
+        const ipCounts = {};
+        parsedLogs.forEach(log => {
+          if (log.ip) {
+            ipCounts[log.ip] = (ipCounts[log.ip] || 0) + 1;
+          }
+        });
+    
+        const hourCounts = {};
+        parsedLogs.forEach(log => {
+          if (log.timestamp) {
+            const hour = new Date(log.timestamp.replace(/:/, ' ')).getHours();
+            hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+          }
+        });
+    
+        const fileData = {
+          logs: parsedLogs,
+          ipCounts,
+          hourCounts
+        };
+    
+        saveFile(fileName, fileData);
+        updateCharts(ipCounts, hourCounts);
+        updateTable(parsedLogs);
+        showMessage(`Successfully processed and stored ${parsedLogs.length} log entries`);
+      } catch (error) {
+        console.error('Error processing log data:', error);
+        showMessage('Error processing log file: ' + error.message, true);
+      }
+    }
+    
+    function updateCharts(ipCounts, hourCounts) {
+      // Destroy existing charts if they exist
+      const charts = Chart.getChart('ipChart');
+      if (charts) charts.destroy();
+      const timeCharts = Chart.getChart('timeChart');
+      if (timeCharts) timeCharts.destroy();
+    
+      new Chart(document.getElementById('ipChart'), {
+        type: 'bar',
+        data: {
+          labels: Object.keys(ipCounts),
+          datasets: [{
+            label: 'Requests per IP',
+            data: Object.values(ipCounts),
+            backgroundColor: 'rgba(52, 152, 219, 0.8)'
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    
+      const hours = Array.from({length: 24}, (_, i) => i);
+      new Chart(document.getElementById('timeChart'), {
+        type: 'line',
+        data: {
+          labels: hours,
+          datasets: [{
+            label: 'Requests per Hour',
+            data: hours.map(hour => hourCounts[hour] || 0),
+            borderColor: 'rgba(46, 204, 113, 0.8)',
+            fill: false
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+    
+    function updateTable(logs) {
+      const tbody = document.querySelector('#logTable tbody');
+      tbody.innerHTML = '';
+      
+      logs.forEach(log => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${log.timestamp}</td>
+          <td>${log.ip}</td>
+          <td>${log.request}</td>
+          <td>${log.status}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+    
+    function exportChart(chartId) {
+      const canvas = document.getElementById(chartId);
+      const image = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `${chartId}-export.png`;
+      link.href = image;
+      link.click();
+    }
+    
+    // File upload handling
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.style.background = 'rgba(52, 152, 219, 0.2)';
+    });
+    
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.background = 'none';
+    });
+    
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.background = 'none';
+      const file = e.dataTransfer.files[0];
+      handleFile(file);
+    });
+    
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      handleFile(file);
+    });
+    
+    function handleFile(file) {
+      if (!file) {
+        showMessage('No file selected', true);
+        return;
+      }
+    
+      if (!file.name.match(/\.(log|txt|csv)$/i)) {
+        showMessage('Please upload a .log, .txt, or .csv file', true);
+        return;
+      }
+    
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          processLogData(e.target.result, file.name);
+        } catch (error) {
+          showMessage('Error reading file: ' + error.message, true);
+        }
+      };
+    
+      reader.onerror = (error) => {
+        showMessage('Error reading file: ' + error.message, true);
+      };
+    
+      reader.readAsText(file);
+    }
+    
+    // Initialize the file list on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      updateFilesList();
+    });
+    </script>
+    </body></html>
